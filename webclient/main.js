@@ -4,47 +4,21 @@
 /*global pshubcl:false */
 "use strict";
 
-//function rand(a, b) {
-//	var diff = a;
-//	if (b !== undefined) {
-//		diff = b - a;
-//	} else {
-//		b = a;
-//		a = 0;
-//	}
-//	return Math.floor(Math.random() * diff) + a;
-//}
-//function makeid()
-//{
-//    var text = "";
-//    var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-//    var max = rand(10,60);
-//    for( var i=0; i < max; i++ )
-//        text += possible.charAt(rand(possible.length));
-//
-//    return text;
-//}
-//function color()
-//{
-//	var text = "";
-//    var possible = ["red", "#FFF510", "#2121FF", "#FE16C9", "#CCC", "#FFFFFE"];
-//    text = possible[rand(possible.length)];
-//    return text;
-//}
-//function test () {
-//	$("#console").append('<span style="color:' + color() + ';">' + makeid() + '</span> \n')
-//	var console    = $('#console');
-//	var height = console[0].scrollHeight;
-//	console.scrollTop(height);
-//}
+var fc = 0;
+
 function onmessage(success, errmsg, jmsg){
 	//console.log(errmsg);
 	if(jmsg !== undefined){
-		console.log(jmsg);
+		fc++;
+		//console.log(jmsg);
 		$("#console").append(jmsg.message);
 		var console2    = $("#console");
 		var height = console2[0].scrollHeight;
-		console2.scrollTop(height);
+		if($("#olaybox").is(":checked"))
+			console2.scrollTop(height);
+		if(fc > 600){
+			cleanup();
+		}
 	}
 }
 function connect() {
@@ -67,7 +41,14 @@ function connect() {
 		});
 	});
 }
+function cleanup() {
+	console.log("CLEANUP!!!!!");
+	if(fc < 500)
+		return;
+	var h = $("#console").html().split("<br>").slice(100);
+	fc = h.length;
+	$("#console").html(h.join("<br>"));
+}
 jQuery(document).ready(function() {
-	//setInterval(test, 1000)
 	connect();
 });

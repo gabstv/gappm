@@ -11,11 +11,7 @@ pshubcl.host = "";
 pshubcl._listen = true;
 
 pshubcl._post = function(sender, path, callback){
-	console.log(JSON.stringify(sender));
-	//var hdrs = {};
-	//hdrs.Apikey = pshubcl.apikey;
-	//if(pshubcl.userkey.length > 0)
-	//	hdrs.Userkey = pshubcl.userkey;
+	//console.log(JSON.stringify(sender));
 	jQuery.ajax({
 	  url: pshubcl.host + path,
 	  type: "POST",
@@ -23,19 +19,18 @@ pshubcl._post = function(sender, path, callback){
 	  data: JSON.stringify(sender),
 	  success: function(data, textStatus, xhr) {
 	    //called when successful
-	    console.log(xhr);
-	    console.log("it kinda worked");
+	    //console.log(xhr);
+	    //console.log("it kinda worked");
 	    callback(true, "", data);
 	  },
 	  error: function(xhr, textStatus, errorThrown) {
 	    //called when there is an error
-	    console.log("it didn't work");
-	    console.log(textStatus);
-	    console.log(xhr);
-	    console.log(xhr.status);
+	    //console.log("it didn't work");
+	    //console.log(textStatus);
+	    //console.log(xhr);
+	    //console.log(xhr.status);
 	    callback(false, errorThrown, null);
 	  },
-	  //headers: hdrs,
 	  contentType: "application/json",
 	  accepts: "application/json",
 	  cache: false,

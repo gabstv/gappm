@@ -12,6 +12,7 @@ import (
 
 type Appdef struct {
 	Path          string
+	UpdatePath    string
 	Args          []string
 	Command       *exec.Cmd
 	LogPath       string
@@ -54,7 +55,7 @@ func (a *Appdef) Run() {
 		}()
 		return
 	}
-	fmt.Fprintln(w, time.Now().String(), a.Path, "started.")
+	fmt.Fprintln(w, time.Now().String(), a.Path, "[[[started]]].")
 	time.Sleep(time.Second * 3)
 	if a.Command.Process != nil {
 		stat, err := a.Command.Process.Wait()
@@ -64,11 +65,11 @@ func (a *Appdef) Run() {
 			if a.BeepOnFailure {
 				fmt.Print("\x07")
 			}
-			fmt.Fprintln(w, "Program", a.Path, "exited.", time.Now().String())
+			fmt.Fprintln(w, "[[[Program]]]", a.Path, "[[[exited]]].", time.Now().String())
 			fmt.Fprintln(w, stat.SystemTime(), stat.UserTime())
 		}
 	} else {
-		time.Sleep(time.Second * 30)
+		time.Sleep(time.Second * 25)
 	}
 	go func() {
 		if !a.Stop {

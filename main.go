@@ -6,6 +6,7 @@ import (
 	"github.com/ActiveState/tail"
 	"github.com/gabstv/cfg"
 	"github.com/gabstv/gappm/gappm"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -54,9 +55,57 @@ func main() {
 	go startClientWS()
 	execApps()
 	go pipeRoutine()
+	go watchApps()
 	go gappm.StartHTML()
 	for !stop {
 		time.Sleep(time.Millisecond * 250)
+	}
+}
+
+func watchApps() {
+	for !stop {
+		for k, _ := range apps {
+			time.Sleep(time.Millisecond * 100)
+			if len(apps[k].UpdatePath) > 0 && !apps[k].Stop {
+				if _, err := os.Stat(apps[k].UpdatePath); err == nil {
+					apps[k].Stop = true
+					fmt.Println("Updating", apps[k].Path, ":", "COPYING OLD VERSION")
+					f, err := os.OpenFile(apps[k].Path+".old", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
+					if err == nil {
+						forig, err := os.Open(apps[k].Path)
+						if err == nil {
+							io.Copy(f, forig)
+							forig.Close()
+						}
+						f.Close()
+					}
+					if apps[k].Command != nil {
+						if apps[k].Command.Process != nil {
+							fmt.Println("Updating", apps[k].Path, ":", "KILLING PROCESS")
+							apps[k].Command.Process.Signal(os.Interrupt)
+							time.Sleep(time.Millisecond * 1500)
+						}
+					}
+					f, err = os.OpenFile(apps[k].UpdatePath, os.O_RDONLY, 0744)
+					if err == nil {
+						fmt.Println("Updating", apps[k].Path, ":", "UPDATING FILE")
+						fupd, err := os.OpenFile(apps[k].Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
+						if err == nil {
+							io.Copy(fupd, f)
+							fupd.Close()
+							os.Remove(apps[k].UpdatePath)
+						}
+						f.Close()
+					}
+					fmt.Println("Updating", apps[k].Path, ":", "RESTARTING PROCESS")
+					apps[k].Stop = false
+					time.Sleep(time.Millisecond * 100)
+					go apps[k].Run()
+					fmt.Println("Updating", apps[k].Path, ":", "DONE")
+				}
+			}
+		}
+		time.Sleep(time.Second * 30)
 	}
 }
 
@@ -83,7 +132,8 @@ func pipeRoutine() {
 		} else {
 			stdo.WriteString(line.Text)
 		}
-		if !strings.HasSuffix(line.Text, "<br>") && !strings.HasSuffix(line.Text, "<br>\n") {
+		if !strings.Contains(line.Text, "<br>") && len(line.Text) > 10 {
+			//stdo.WriteString("HUEHUEBRBR `" + fmt.Sprintf("%v", []byte(line.Text)) + "` " + line.Text + "`\n")
 			gappm.Publish(line.Text + "<br>\n")
 		} else {
 			gappm.Publish(line.Text)
@@ -114,6 +164,10 @@ func loadConfig() {
 			appd := gappm.Appdef{}
 			args := extractArgs(v)
 			appd.Path = args[0]
+			k2 := "update-" + k[5:]
+			if len(cfgm[k2]) > 0 {
+				appd.UpdatePath = cfgm[k2]
+			}
 			appd.Args = args[1:]
 			apps = append(apps, appd)
 		}
@@ -131,7 +185,10 @@ func loadConfig() {
 }
 
 func findConfig() string {
-	d := ""
+	d, _ := path.Split(os.Args[0])
+	if _, er2 := os.Stat(path.Join(d, "gappm.main.conf")); er2 == nil {
+		return path.Join(d, "gappm.main.conf")
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		d = path.Join("/Library", "Preferences", "gappm")

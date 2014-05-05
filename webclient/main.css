@@ -17,3 +17,13 @@ html, body {
 	word-wrap: break-word;
 	overflow-y: scroll;
 }
+
+#olay{
+	position: absolute;
+	z-index: 999;
+	top: 0px;
+	right: 20px;
+	width: 200px;
+	height: 25px;
+	background-color: #300;
+}
