@@ -23,6 +23,7 @@ var (
 	stop  bool
 	pipef *os.File
 	stdo  *os.File
+	sigk  os.Signal
 )
 
 func main() {
@@ -45,7 +46,7 @@ func main() {
 			apps[k].Stop = true
 			if apps[k].Command != nil {
 				if apps[k].Command.Process != nil {
-					apps[k].Command.Process.Signal(os.Interrupt)
+					apps[k].Command.Process.Signal(sigk)
 				}
 			}
 		}
@@ -82,7 +83,7 @@ func watchApps() {
 					if apps[k].Command != nil {
 						if apps[k].Command.Process != nil {
 							fmt.Println("Updating", apps[k].Path, ":", "KILLING PROCESS")
-							apps[k].Command.Process.Signal(os.Interrupt)
+							apps[k].Command.Process.Signal(sigk)
 							time.Sleep(time.Millisecond * 1500)
 						}
 					}
@@ -92,10 +93,27 @@ func watchApps() {
 						fupd, err := os.OpenFile(apps[k].Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
 						if err == nil {
 							io.Copy(fupd, f)
+							f.Close()
+							f = nil
 							fupd.Close()
-							os.Remove(apps[k].UpdatePath)
+							//time.Sleep(time.Second * 1)
+							//fupd, _ = ioutil.TempFile("", "atmp")
+							//fupd.Close()
+							//time.Sleep(time.Second * 1)
+							//fpp := fupd.Name()
+							fupd = nil
+							//time.Sleep(time.Second * 1)
+							//os.Remove(fpp)
+							time.Sleep(time.Second * 1)
+							err = os.Remove(apps[k].UpdatePath)
+							for err != nil {
+								fmt.Println("[FATAL] [FATAL] [FATAL] ERROR ON DELETING UPDATE FILE:", err.Error())
+								time.Sleep(time.Second * 2)
+								err = os.Remove(apps[k].UpdatePath)
+							}
 						}
-						f.Close()
+						//f.Close()
+						//f = nil
 					}
 					fmt.Println("Updating", apps[k].Path, ":", "RESTARTING PROCESS")
 					apps[k].Stop = false
@@ -143,6 +161,10 @@ func pipeRoutine() {
 }
 
 func loadConfig() {
+	sigk = os.Interrupt
+	if runtime.GOOS == "windows" {
+		sigk = os.Kill
+	}
 	stdo = os.Stdout
 	var err error
 	pipef, err = ioutil.TempFile("", "gappm_")
