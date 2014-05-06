@@ -96,14 +96,7 @@ func watchApps() {
 							f.Close()
 							f = nil
 							fupd.Close()
-							//time.Sleep(time.Second * 1)
-							//fupd, _ = ioutil.TempFile("", "atmp")
-							//fupd.Close()
-							//time.Sleep(time.Second * 1)
-							//fpp := fupd.Name()
 							fupd = nil
-							//time.Sleep(time.Second * 1)
-							//os.Remove(fpp)
 							time.Sleep(time.Second * 1)
 							err = os.Remove(apps[k].UpdatePath)
 							for err != nil {
@@ -111,9 +104,10 @@ func watchApps() {
 								time.Sleep(time.Second * 2)
 								err = os.Remove(apps[k].UpdatePath)
 							}
+						} else {
+							f.Close()
+							f = nil
 						}
-						//f.Close()
-						//f = nil
 					}
 					fmt.Println("Updating", apps[k].Path, ":", "RESTARTING PROCESS")
 					apps[k].Stop = false
