@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,6 +23,12 @@ type Appdef struct {
 	Writer2       io.Writer
 }
 
+func (a *Appdef) DailyLogPath() string {
+	n := time.Now()
+	tail := "_" + strconv.Itoa(n.Year()) + "-" + strconv.Itoa(int(n.Month())) + "-" + strconv.Itoa(n.Day()) + ".log"
+	return strings.Replace(a.LogPath, ".log", tail, 1)
+}
+
 func (a *Appdef) Run() {
 	if a.Writer2 == nil {
 		// /dev/null
@@ -29,13 +37,13 @@ func (a *Appdef) Run() {
 	a.Command = exec.Command(a.Path, a.Args...)
 	// check log file
 	var f *os.File
-	if _, err := os.Stat(a.LogPath); err != nil {
-		f, err = os.OpenFile(a.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if _, err := os.Stat(a.DailyLogPath()); err != nil {
+		f, err = os.OpenFile(a.DailyLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
-			log.Fatalln(a.Path, a.LogPath, err)
+			log.Fatalln(a.Path, a.DailyLogPath(), err)
 		}
 	} else {
-		f, _ = os.OpenFile(a.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		f, _ = os.OpenFile(a.DailyLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	}
 	w := io.MultiWriter(a.Writer2, f)
 	a.Command.Stdout = w
