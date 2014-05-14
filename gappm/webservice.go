@@ -6,6 +6,8 @@ import (
 	"gabs.tv/pshubcl"
 	"github.com/gabstv/gappm/gappm/webfiles"
 	"github.com/go-martini/martini"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 )
@@ -61,6 +63,7 @@ func StartHTML() {
 		w.WriteHeader(204)
 		fmt.Println("OPTIONS!!!!!!")
 	})
+	v.Map(log.New(ioutil.Discard, "[martini] ", 0))
 	fmt.Println(http.ListenAndServe(":9876", v))
 }
 
