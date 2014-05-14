@@ -14,16 +14,19 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
 var (
-	cfgm  map[string]string
-	apps  []gappm.Appdef
-	stop  bool
-	pipef *os.File
-	stdo  *os.File
-	sigk  os.Signal
+	cfgm    map[string]string
+	apps    []gappm.Appdef
+	stop    bool
+	pipef   *os.File
+	stdo    *os.File
+	sigk    os.Signal
+	SIGTERM os.Signal = syscall.SIGTERM
+	SIGQUIT os.Signal = syscall.SIGQUIT
 )
 
 func main() {
@@ -39,7 +42,11 @@ func main() {
 	}()
 
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
+	if runtime.GOOS == "windows" {
+		signal.Notify(c, os.Interrupt, os.Kill, SIGTERM, SIGQUIT)
+	} else {
+		signal.Notify(c, os.Interrupt, os.Kill)
+	}
 	go func() {
 		<-c
 		for k := range apps {
@@ -123,9 +130,9 @@ func watchApps() {
 
 func execApps() {
 	for k, _ := range apps {
-		go func() {
-			apps[k].Run()
-		}()
+		go func(n int) {
+			apps[n].Run()
+		}(k)
 	}
 }
 
@@ -177,18 +184,26 @@ func loadConfig() {
 	apps = make([]gappm.Appdef, 0)
 	for k, v := range cfgm {
 		if strings.HasPrefix(k, "exec-") {
+			log.Println("APP: ", k, v)
 			appd := gappm.Appdef{}
 			args := extractArgs(v)
 			appd.Path = args[0]
 			k2 := "update-" + k[5:]
 			if len(cfgm[k2]) > 0 {
 				appd.UpdatePath = cfgm[k2]
+				if strings.HasPrefix(appd.UpdatePath, "\"") {
+					appd.UpdatePath = appd.UpdatePath[1:]
+				}
+				if strings.HasSuffix(appd.UpdatePath, "\"") {
+					appd.UpdatePath = appd.UpdatePath[:len(appd.UpdatePath)-1]
+				}
 			}
 			appd.Args = args[1:]
 			apps = append(apps, appd)
 		}
 	}
 	for k := range apps {
+		log.Println("APP[2] [", k, "] ", apps[k].Path)
 		_, fn := path.Split(apps[k].Path)
 		apps[k].LogPath = path.Join(cfgm["logpath"], fn+".log")
 		if cfgm["beep_on_failure"] == "true" {
