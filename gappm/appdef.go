@@ -20,7 +20,22 @@ type Appdef struct {
 	LogPath       string
 	BeepOnFailure bool
 	Stop          bool
+	Cron          AppDefCron
 	Writer2       io.Writer
+	//
+	lf *os.File
+}
+
+type AppDefCron struct {
+	UseTime bool
+	UseDay  bool
+	//
+	StartHour   int
+	StartMinute int
+	StopHour    int
+	StopMinute  int
+	//
+	StartDays int
 }
 
 func (a *Appdef) DailyLogPath() string {
@@ -29,23 +44,33 @@ func (a *Appdef) DailyLogPath() string {
 	return strings.Replace(a.LogPath, ".log", tail, 1)
 }
 
+func (a *Appdef) oldLogPath(days int) string {
+	n := time.Now()
+	n.Add(time.Hour * -24 * time.Duration(days))
+	tail := "_" + strconv.Itoa(n.Year()) + "-" + strconv.Itoa(int(n.Month())) + "-" + strconv.Itoa(n.Day()) + ".log"
+	return strings.Replace(a.LogPath, ".log", tail, 1)
+}
+
 func (a *Appdef) Run() {
+	// CHECK CRON
+	if !a.CronTest() {
+		return
+	}
 	if a.Writer2 == nil {
 		// /dev/null
 		a.Writer2 = ioutil.Discard
 	}
 	a.Command = exec.Command(a.Path, a.Args...)
 	// check log file
-	var f *os.File
 	if _, err := os.Stat(a.DailyLogPath()); err != nil {
-		f, err = os.OpenFile(a.DailyLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		a.lf, err = os.OpenFile(a.DailyLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			log.Fatalln(a.Path, a.DailyLogPath(), err)
 		}
 	} else {
-		f, _ = os.OpenFile(a.DailyLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		a.lf, _ = os.OpenFile(a.DailyLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	}
-	w := io.MultiWriter(a.Writer2, f)
+	w := io.MultiWriter(a.Writer2, a.lf)
 	a.Command.Stdout = w
 	a.Command.Stderr = w
 
@@ -84,4 +109,71 @@ func (a *Appdef) Run() {
 			a.Run()
 		}
 	}()
+}
+
+func (a *Appdef) ReLog(ldays int) {
+	a.lf.Close()
+	a.lf, _ = os.OpenFile(a.DailyLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	//
+	// gambits do Elio
+	if ldays > 0 {
+		for i := ldays + 1; i < ldays+60; i++ {
+			if _, err := os.Stat(a.oldLogPath(i)); err == nil {
+				os.Remove(a.oldLogPath(i))
+			}
+		}
+	}
+}
+
+func (a *Appdef) CronTest() bool {
+	if !a.Cron.UseTime {
+		return true
+	}
+	now := time.Now()
+	nowhms := now.Hour()*60 + now.Minute()
+	startms := a.Cron.StartHour*60 + a.Cron.StartMinute
+	stopms := a.Cron.StopHour*60 + a.Cron.StopMinute
+	if startms > stopms {
+		if nowhms >= startms || nowhms < stopms {
+			return true
+		}
+	} else {
+		if nowhms >= startms && nowhms < stopms {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Appdef) IsRunning() bool {
+	if a.Command == nil {
+		return false
+	}
+	if a.Command.Process == nil {
+		return false
+	}
+	return true
+}
+
+func ParseHM(str string) (hour, minute int, ok bool) {
+	ok = false
+	hm := strings.Split(str, ":")
+	if len(hm) < 2 {
+		return
+	}
+	str_hour := strings.TrimSpace(hm[0])
+	str_minute := strings.TrimSpace(hm[1])
+	h0, err := strconv.ParseInt(str_hour, 10, 32)
+	if err != nil {
+		return
+	}
+	hour = int(h0)
+
+	m0, err := strconv.ParseInt(str_minute, 10, 32)
+	if err != nil {
+		return
+	}
+	minute = int(m0)
+	ok = true
+	return
 }

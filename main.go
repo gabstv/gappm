@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/ActiveState/tail"
+	"github.com/ActiveState/tail/watch"
 	"github.com/gabstv/cfg"
 	"github.com/gabstv/gappm/gappm"
 	"io"
 	"io/ioutil"
+	"launchpad.net/tomb"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -22,11 +26,16 @@ var (
 	cfgm    map[string]string
 	apps    []gappm.Appdef
 	stop    bool
+	restart bool
 	pipef   *os.File
 	stdo    *os.File
 	sigk    os.Signal
 	SIGTERM os.Signal = syscall.SIGTERM
 	SIGQUIT os.Signal = syscall.SIGQUIT
+	//
+	lastDay int
+	c       chan os.Signal
+	tomb0   tomb.Tomb
 )
 
 func main() {
@@ -41,7 +50,7 @@ func main() {
 		os.Remove(fn)
 	}()
 
-	c := make(chan os.Signal, 1)
+	c = make(chan os.Signal, 1)
 	if runtime.GOOS == "windows" {
 		signal.Notify(c, os.Interrupt, os.Kill, SIGTERM, SIGQUIT)
 	} else {
@@ -59,15 +68,33 @@ func main() {
 		}
 		stop = true
 	}()
-	go gappm.StartWS()
-	go startClientWS()
+	if cfgm["webconsole"] != "false" {
+		go gappm.StartWS()
+		go startClientWS()
+	}
 	execApps()
 	go pipeRoutine()
 	go watchApps()
-	go gappm.StartHTML()
+
+	if cfgm["webconsole"] != "false" {
+		go gappm.StartHTML()
+	}
+	//if cfgm["watch_config"] == "true" {
+	//go watchConfig()
+	//}
 	for !stop {
 		time.Sleep(time.Millisecond * 250)
+		ld := time.Now().Day()
+		if !stop && ld != lastDay {
+			lastDay = ld
+			// RELOG
+			ldays, _ := strconv.Atoi(cfgm["delete_logs_older_than_x_days"])
+			for k := range apps {
+				apps[k].ReLog(ldays)
+			}
+		}
 	}
+	log.Println("[[[ [[[ [[[ [[[ [[[ [[[ [[[[ EXIT ]]]] ]]] ]]] ]]] ]]] ]]] ]]]")
 }
 
 func watchApps() {
@@ -123,8 +150,54 @@ func watchApps() {
 					fmt.Println("Updating", apps[k].Path, ":", "DONE")
 				}
 			}
+			if apps[k].Cron.UseTime {
+				if apps[k].CronTest() {
+					if !apps[k].IsRunning() {
+						fmt.Println("[CRON] Starting", apps[k].Path, "(cron job)")
+						apps[k].Stop = false
+						go apps[k].Run()
+						time.Sleep(time.Microsecond * 10)
+					}
+				} else {
+					if apps[k].IsRunning() {
+						er90 := apps[k].Command.Process.Signal(sigk)
+						if er90 == nil {
+							fmt.Println("[CRON] Killing", apps[k].Path, "(cron job)")
+							apps[k].Stop = true
+							time.Sleep(time.Millisecond * 500)
+							apps[k].Stop = false
+						}
+					}
+				}
+			}
 		}
 		time.Sleep(time.Second * 30)
+	}
+}
+
+func getExtension() string {
+	if runtime.GOOS == "windows" {
+		return ".bat"
+	}
+	return ".sh"
+}
+
+func watchConfig() {
+	fmt.Print("\x07")
+	time.Sleep(time.Second * 15)
+	fmt.Fprintln(pipef, time.Now().String(), "~~~~~ WATCHING CONFIG FILE ~~~~~")
+	w := watch.NewPollingFileWatcher(findConfig())
+	w.BlockUntilExists(&tomb0)
+	fmt.Fprintln(pipef, time.Now().String(), "~~~~~ CONFIG FILE CHANGED ~~~~~")
+	if len(cfgm["restart_command"]) > 1 {
+		tempdir := os.TempDir()
+		tf := path.Join(tempdir, "gappm_restart"+getExtension())
+		os.Remove(tf)
+		fupd, _ := os.OpenFile(tf, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
+		fupd.Write([]byte(cfgm["restart_command"]))
+		fupd.Close()
+		cmd0 := exec.Command(tf, os.Args[0])
+		cmd0.Start()
 	}
 }
 
@@ -152,16 +225,20 @@ func pipeRoutine() {
 			stdo.WriteString(line.Text)
 		}
 		if !strings.Contains(line.Text, "<br>") && len(line.Text) > 10 {
-			//stdo.WriteString("HUEHUEBRBR `" + fmt.Sprintf("%v", []byte(line.Text)) + "` " + line.Text + "`\n")
-			gappm.Publish(line.Text + "<br>\n")
+			if cfgm["webconsole"] != "false" {
+				gappm.Publish(line.Text + "<br>\n")
+			}
 		} else {
-			gappm.Publish(line.Text)
+			if cfgm["webconsole"] != "false" {
+				gappm.Publish(line.Text)
+			}
 		}
 	}
 	stdo.WriteString("PIPE ENDED\n")
 }
 
 func loadConfig() {
+	lastDay = time.Now().Day()
 	sigk = os.Interrupt
 	if runtime.GOOS == "windows" {
 		sigk = os.Kill
@@ -198,6 +275,27 @@ func loadConfig() {
 					appd.UpdatePath = appd.UpdatePath[:len(appd.UpdatePath)-1]
 				}
 			}
+			// cron (time)
+			k2 = "time-" + k[5:]
+			cfgtime := cfgm[k2]
+			if len(cfgtime) > 0 {
+				be := strings.Split(cfgtime, " ")
+				h0, m0, ok := gappm.ParseHM(be[0])
+				if !ok || len(be) != 2 {
+					fmt.Println("INVALID TIME FORMAT [", k[5:], "]: ", cfgtime)
+				} else {
+					h1, m1, ok := gappm.ParseHM(be[1])
+					if !ok {
+						fmt.Println("INVALID TIME FORMAT [", k[5:], "]: ", be[1])
+					} else {
+						appd.Cron.UseTime = true
+						appd.Cron.StartHour = h0
+						appd.Cron.StartMinute = m0
+						appd.Cron.StopHour = h1
+						appd.Cron.StopMinute = m1
+					}
+				}
+			}
 			appd.Args = args[1:]
 			apps = append(apps, appd)
 		}
@@ -212,6 +310,9 @@ func loadConfig() {
 		if cfgm["mirror_app_logs"] == "true" {
 			apps[k].Writer2 = os.Stdout
 		}
+	}
+	if len(cfgm["restart_command"]) > 1 {
+		cfgm["restart_command"] = strings.Replace(cfgm["restart_command"], "\n", "\r\n", -1)
 	}
 }
 
