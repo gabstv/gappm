@@ -1,6 +1,7 @@
 package gappm
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -112,8 +113,24 @@ func (a *Appdef) Run() {
 }
 
 func (a *Appdef) ReLog(ldays int) {
+
+	buff := new(bytes.Buffer)
+	w := io.MultiWriter(a.Writer2, buff)
+	if a.Command != nil {
+		a.Command.Stdout = w
+		a.Command.Stderr = w
+	}
+
 	a.lf.Close()
 	a.lf, _ = os.OpenFile(a.DailyLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+
+	w = io.MultiWriter(a.Writer2, a.lf)
+	if a.Command != nil {
+		a.Command.Stdout = w
+		a.Command.Stderr = w
+	}
+
+	a.lf.Write(buff.Bytes())
 	//
 	// gambits do Elio
 	if ldays > 0 {

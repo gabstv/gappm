@@ -89,6 +89,7 @@ func main() {
 			lastDay = ld
 			// RELOG
 			ldays, _ := strconv.Atoi(cfgm["delete_logs_older_than_x_days"])
+			fmt.Println("RE LOGGING", ldays)
 			for k := range apps {
 				apps[k].ReLog(ldays)
 			}
