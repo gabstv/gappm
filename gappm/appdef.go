@@ -37,7 +37,22 @@ type AppDefCron struct {
 	StopMinute  int
 	//
 	StartDays int
+	Entries   []TzEntry
 }
+
+func dayOfWeek() int {
+	return int(time.Now().Weekday())
+}
+
+type TzEntry struct {
+	Day         int
+	StartHour   int
+	StartMinute int
+	StopHour    int
+	StopMinute  int
+}
+
+type KV map[string]string
 
 func (a *Appdef) DailyLogPath() string {
 	n := time.Now()
@@ -148,15 +163,34 @@ func (a *Appdef) CronTest() bool {
 	}
 	now := time.Now()
 	nowhms := now.Hour()*60 + now.Minute()
-	startms := a.Cron.StartHour*60 + a.Cron.StartMinute
-	stopms := a.Cron.StopHour*60 + a.Cron.StopMinute
-	if startms > stopms {
-		if nowhms >= startms || nowhms < stopms {
-			return true
+	if a.Cron.Entries != nil {
+		today := dayOfWeek()
+		for _, v := range a.Cron.Entries {
+			if v.Day == today {
+				startms := v.StartHour*60 + v.StartMinute
+				stopms := v.StopHour*60 + v.StopMinute
+				if startms > stopms {
+					if nowhms >= startms || nowhms < stopms {
+						return true
+					}
+				} else {
+					if nowhms >= startms && nowhms < stopms {
+						return true
+					}
+				}
+			}
 		}
 	} else {
-		if nowhms >= startms && nowhms < stopms {
-			return true
+		startms := a.Cron.StartHour*60 + a.Cron.StartMinute
+		stopms := a.Cron.StopHour*60 + a.Cron.StopMinute
+		if startms > stopms {
+			if nowhms >= startms || nowhms < stopms {
+				return true
+			}
+		} else {
+			if nowhms >= startms && nowhms < stopms {
+				return true
+			}
 		}
 	}
 	return false

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/ActiveState/tail"
 	"github.com/ActiveState/tail/watch"
@@ -279,20 +280,72 @@ func loadConfig() {
 			k2 = "time-" + k[5:]
 			cfgtime := cfgm[k2]
 			if len(cfgtime) > 0 {
-				be := strings.Split(cfgtime, " ")
-				h0, m0, ok := gappm.ParseHM(be[0])
-				if !ok || len(be) != 2 {
-					fmt.Println("INVALID TIME FORMAT [", k[5:], "]: ", cfgtime)
-				} else {
-					h1, m1, ok := gappm.ParseHM(be[1])
-					if !ok {
-						fmt.Println("INVALID TIME FORMAT [", k[5:], "]: ", be[1])
+				if strings.HasPrefix(cfgtime, "[") {
+					vls := make([]gappm.KV, 0)
+					err = json.Unmarshal([]byte(cfgtime), &vls)
+					if err != nil {
+						fmt.Println("INVALID TZDATA JSON [", k[5:], "]: ", cfgtime)
+						fmt.Println("IT SHOULD BE", `[{"1":"08:00 09:00"},{"2345":"07:00 09:00"}]`)
 					} else {
-						appd.Cron.UseTime = true
-						appd.Cron.StartHour = h0
-						appd.Cron.StartMinute = m0
-						appd.Cron.StopHour = h1
-						appd.Cron.StopMinute = m1
+						log.Println(vls)
+						//
+						appd.Cron.Entries = make([]gappm.TzEntry, 0)
+						for _, sv := range vls {
+							for tzk, tzv := range sv {
+								be := strings.Split(tzv, " ")
+								h0, m0, ok := gappm.ParseHM(be[0])
+								if !ok || len(be) != 2 {
+									fmt.Println("INVALID TIME FORMAT 1 [", k[5:], tzk, tzv, "]: ", cfgtime)
+								} else {
+									h1, m1, ok := gappm.ParseHM(be[1])
+									if !ok {
+										fmt.Println("INVALID TIME FORMAT 2 [", k[5:], tzk, tzv, "]: ", be[1])
+									} else {
+										appd.Cron.UseTime = true
+										// loop through
+										for _, rn := range tzk {
+											r := -1
+											switch rn {
+											case '0':
+												r = 0
+											case '1':
+												r = 1
+											case '2':
+												r = 2
+											case '3':
+												r = 3
+											case '4':
+												r = 4
+											case '5':
+												r = 5
+											case '6':
+												r = 6
+											}
+											if r > -1 {
+												appd.Cron.Entries = append(appd.Cron.Entries, gappm.TzEntry{r, h0, m0, h1, m1})
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				} else {
+					be := strings.Split(cfgtime, " ")
+					h0, m0, ok := gappm.ParseHM(be[0])
+					if !ok || len(be) != 2 {
+						fmt.Println("INVALID TIME FORMAT [", k[5:], "]: ", cfgtime)
+					} else {
+						h1, m1, ok := gappm.ParseHM(be[1])
+						if !ok {
+							fmt.Println("INVALID TIME FORMAT [", k[5:], "]: ", be[1])
+						} else {
+							appd.Cron.UseTime = true
+							appd.Cron.StartHour = h0
+							appd.Cron.StartMinute = m0
+							appd.Cron.StopHour = h1
+							appd.Cron.StopMinute = m1
+						}
 					}
 				}
 			}
