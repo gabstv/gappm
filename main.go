@@ -101,7 +101,6 @@ func main() {
 func watchApps() {
 	for !stop {
 		for k, _ := range apps {
-			time.Sleep(time.Millisecond * 100)
 			if len(apps[k].UpdatePath) > 0 && !apps[k].Stop {
 				if _, err := os.Stat(apps[k].UpdatePath); err == nil {
 					apps[k].Stop = true
@@ -172,7 +171,7 @@ func watchApps() {
 				}
 			}
 		}
-		time.Sleep(time.Second * 30)
+		time.Sleep(time.Second * 2)
 	}
 }
 
